@@ -1,0 +1,21 @@
+TODO:
+***
+connect to the netcat listener! we already parse out
+where we're supposed to connect to..
+
+i think we could essentially write a telnet client,
+connect to the honey server, and pipe it all through netcat
+so it looks like it's a direct line to /bin/sh
+
+just open the client, give a special user pass that
+starts the server in 'netcat mode' where
+there's no prompt, and pass control to netcat :)
+
+server could look for user: net password: cat
+and set a flag on the client obj that
+determines if we're in telnet or netcat mode.
+***
+
+***
+change headers so we appear the same as a GoAhead cam on shodan !!!!
+***
