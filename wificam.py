@@ -28,12 +28,63 @@ headers are set-up to appear as a GoAhead cam on Shodan:
 https://www.shodan.io/search?query=GoAhead+5ccc069c403ebaf9f0171e9517f40e41
 
 """
+
+import hashlib
+import sys
+import os
+
+def check_pwd(header):
+    for field in header.split(' '):
+        field = field.split('=')
+        if field[0] == "username":
+            username = field[1].replace('"', '').replace(',', '')
+        elif field[0] == "cnonce":
+            cnonce = field[1][1:-1].replace('"', '').replace(',', '')
+        elif field[0] == "response":
+            response = field[1][1:-1].replace('"', '').replace(',', '')
+    return(check_hash(username, cnonce, response))
+
+def check_hash(username, cnonce, response):
+    passwords = ["88888", "admin", "password", "default", "initial", "12345",
+                 "123456", "service", "root", "666666", "888888", "66666",
+                 "system", "pass", "meinsm", "4321", "ikwb", "ubnt",
+                 "supervisor", "damin", "tech", "klv1234", "anko",
+                 "vizxv", "xc3511", "toor", "7ujMko0admin", "hi3518",
+                 "pass", "realtek", "admin1234", "54321", "fucker",
+                 "5up", "Zte521", "guest", "7up", "1111111", "juantech",
+                 "xmhdipc", "1234", "user", "smcadmin", "support",
+                 "dreambox", "1111", "telnet", "larry", "raspberry",
+                 "123456790", "admin1234", "root1234", "vivek", "office",
+                 "rasplex", "manager", "pruebas", "games", "4321"]
+    for password in passwords:
+        if digest_hash(username, password, cnonce) == response:
+            return(password)
+    return(None)
+
+def digest_hash(username, password, cnonce):
+    qop = "auth"
+    realm = "GoAhead"
+    nonce = "a32f2b51bcb55c24d003a21be5ec0345"
+    uri = "/"
+    nc = "00000001"
+    method = "GET"
+    ha1 = hashlib.new('md5')
+    ha1.update("{}:{}:{}".format(username, realm, password).encode("utf-8"))
+    ha2 = hashlib.new('md5')
+    ha2.update("{}:{}".format(method, uri).encode("utf-8"))
+    response = hashlib.new('md5')
+    response.update("{}:{}:{}:{}:{}:{}".format(
+        ha1.hexdigest(), nonce, nc, cnonce, qop, ha2.hexdigest()).encode('utf-8'))
+    return response.hexdigest()
+
+
 import time
+import os
 import subprocess
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 count = 0
-server_address = ('0', 81)
+server_address = ('0', 80)
 
 """
 Set the address/port for your server here.
@@ -45,6 +96,8 @@ we're going for authenticity. ;)
 
 class GoAheadHandler(BaseHTTPRequestHandler):
   logfile = "/var/log/hms/wificam-log.txt"
+  if not os.access(logfile, os.W_OK):
+      logfile = "wificam-log.txt"
   server_version = "GoAhead-Webs"
   sys_version = ""
   protocol_version="HTTP/1.1"
@@ -175,7 +228,7 @@ class GoAheadHandler(BaseHTTPRequestHandler):
       self.log_message("Attacker attempting to get credentials! Sending fake creds...")
       count = 1
       msg = ("b" * 137) #filler, attack script will skip this to look for uname
-      msg += "minad" #username
+      msg += "admin" #username
       msg += ("\0" * 27) # more filler, script skips forward 27 for pass
       msg += "damin" #password
       self.send_response(200)
@@ -215,6 +268,7 @@ class GoAheadHandler(BaseHTTPRequestHandler):
       msg += "        <body><h2>Access Error: Unauthorized</h2>\n"
       msg += "        <p>Access Denied\n"
       msg += "Wrong Password</p></body></html>\n\n"
+      auth = self.headers['Authorization']
       self.send_response(401)
       self.send_header('WWW-Authenticate', 'Digest realm="GoAhead", domain=":{}",qop="auth", nonce="a32f2b51bcb55c24d003a21be5ec0345", opaque="5ccc069c403ebaf9f0171e9517f40e41",algorithm="MD5", stale="FALSE"'.format(server_address[1]))
       self.send_header('Pragma', 'no-cache')
@@ -224,8 +278,11 @@ class GoAheadHandler(BaseHTTPRequestHandler):
       if self.command != "HEAD":
         self.wfile.write(bytes(msg, "utf8"))
       self.close_connection = 1
-      self.log_message("Attempted login!")
-
+      pwd = check_pwd(auth)
+      if pwd:
+        self.log_message("Attempted login with password: {}".format(pwd))
+      else:
+        self.log_message("Attempted login, unknown password.")
     else:
       """
       This basically just covers any old GET or HEAD request.
@@ -255,8 +312,7 @@ class GoAheadHandler(BaseHTTPRequestHandler):
 
 def run():
   """
-  Loop to start the server up, bound to all addresses, on the given port.
-  If you change the port, it should change the headers to reflect your new port.
+  Loop to start the server up!
   """
   httpd = HTTPServer(server_address, GoAheadHandler)
   httpd.serve_forever()
